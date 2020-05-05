@@ -232,9 +232,9 @@ public class ResortSeqDemo {
 
 ### 3. 你在哪些地方用到过volatile?
 
-> 单例模式的安全问题: 
->
-> 常见的DCL（Double Check Lock）模式虽然加了同步，但是在多线程下依然会有线程安全问题。
+单例模式的安全问题: 
+
+常见的DCL（Double Check Lock）模式虽然加了同步，但是在多线程下依然会有线程安全问题。
 
 ```java
 public class SingletonDemo {
@@ -338,9 +338,11 @@ public final int getAndAddInt(Object var1, long var2, int var4) {
 
 ### 2.2 CAS缺点
 
-> + 循环时间长开销很大
-> + 只能保证一个共享变量的原子性, 多个变量依然要加锁
-> + 引出来**ABA问题**
+- 循环时间长开销很大
+
+- 只能保证一个共享变量的原子性, 多个变量依然要加锁
+
+- 引出来**ABA问题**
 
 ## 3. 原子类AtomicInteger的ABA问题
 
@@ -412,7 +414,7 @@ public class ContainerNotSafeDemo {
 这是JUC的类，通过**写时复制**来实现**读写分离**。比如其`add()`方法，就是先**复制**一个新数组，长度为原数组长度+1，然后将新数组最后一个元素设为添加的元素。
 
 ```java
-public boolean add(E e) {
+	public boolean add(E e) {
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
@@ -451,15 +453,52 @@ public boolean add(E e) {
 
 `HashMap`不是线程安全的，`Hashtable`是线程安全的，但是跟`Vector`类似，太重量级。所以也有类似CopyOnWriteMap，只不过叫`ConcurrentHashMap`。
 
+关于集合不安全类请看[ContainerNotSafeDemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/ContainerNotSafeDemo.java)
 
+## 5. JAVA锁
 
+### 5.1 公平锁和非公平锁
 
+#### 5.1.1 是什么?
 
+公平锁是指多个线程**按照申请锁的顺序**来获取锁类似排队打饭, 先来后到.
 
+非公平锁是指在多线程获取锁的顺序**并不是按照申请锁的顺序**, 有可能后申请的线程比先申请的线程优先获取到锁,在高并发的情况下, 有可能造成**优先级反转**或者**饥饿现象**.
 
+#### 5.1.2 区别?
 
+公平锁在获取锁时先查看此锁维护的**等待队列**，**为空**或者当前线程是等待队列的**队首**，则直接占有锁，否则插入到等待队列，FIFO原则(先进先出)。非公平锁比较粗鲁，上来直接**先尝试占有锁**，失败则采用公平锁方式。非公平锁的优点是**吞吐量**比公平锁更大。
 
+> `synchronized`和`java.util.concurrent.locks.ReentrantLock`默认都是**非公平锁**。`ReentrantLock`在构造的时候传入`true`则是**公平锁**。
 
+### 5.2 可重入锁(递归锁)
+
+可重入锁又叫递归锁，指的同一个线程在**外层方法**获得锁时，进入**内层方法**会自动获取锁。也就是说，线程可以进入任何一个它已经拥有锁的代码块。比如`get`方法里面有`set`方法，两个方法都有同一把锁，得到了`get`的锁，就自动得到了`set`的锁。
+
+**可重入锁最大的作用就是避免死锁**
+
+####锁的配对
+
+锁之间要配对，加了几把锁，最后就得解开几把锁，下面的代码编译和运行都没有任何问题。但锁的数量不匹配会导致死循环。
+
+```java
+lock.lock();
+lock.lock();
+try{
+    someAction();
+}finally{
+    lock.unlock();
+}
+```
+
+### 5.3 自旋锁
+
+所谓自旋锁，就是尝试获取锁的线程不会**立即阻塞**，而是采用**循环的方式去尝试获取**。自己在那儿一直循环获取，就像“**自旋**”一样。这样的好处是减少**线程切换的上下文开销**，缺点是会**消耗CPU**。CAS底层的`getAndAddInt`就是**自旋锁**思想。
+
+```java
+//跟CAS类似，一直循环比较。
+while (!atomicReference.compareAndSet(null, thread)) { }
+```
 
 
 
