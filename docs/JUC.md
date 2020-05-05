@@ -2,13 +2,13 @@
 
 ## 1. 谈谈你对volatile的理解
 
-### 1. volatile是Java虚拟机提供的轻量级的同步机制
+### 1.1 volatile是Java虚拟机提供的轻量级的同步机制
 
 - 保证可见性
 - 不保证原子性
 - 禁止指令重排
 
-### 2. JMM你谈谈
+### 1.2. JMM你谈谈
 
 JMM(Java内存模型Java Memory Model,简称JMM)本身是一种抽象的概念 并不真实存在,它描述的是一组规则或规范通过规范定制了程序中各个变量(包括实例字段,静态字段和构成数组对象的元素)的访问方式.
 
@@ -22,7 +22,7 @@ JMM关于同步规定:
 
 ![JMM](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/JMM.jpg)
 
-#### 2.1 可见性
+#### 1.2.1 可见性
 
 > 通过前面对JMM的介绍,我们知道: 
 > 各个线程对主内存中共享变量的操作都是各个线程各自拷贝到自己的工作内存操作后再写回主内存中的.
@@ -82,7 +82,7 @@ main	 mission is over,main get number value: 60
 
 加了`volatile`修饰的变量number,在AAA线程修改为60后,会将本地内存的number值刷新到主内存中,使得main线程获取到了最新的值,所以`volatile`可以保证可见性.
 
-#### 2.2 原子性
+#### 1.2.2 原子性
 
 ```java
 class MyData{
@@ -193,7 +193,7 @@ main	 int type, finally number value: 18988
 main	 AtomicInteger type, finally number value: 20000
 ```
 
-#### 2.3 有序性
+#### 1.2.3 有序性
 
 volatile可以保证**有序性**，也就是防止**指令重排序**。所谓指令重排序，就是出于优化考虑，CPU执行指令的顺序跟程序员自己编写的顺序不一致。就好比一份试卷，题号是老师规定的，是程序员规定的，但是考生（CPU）可以先做选择，也可以先做填空。
 
@@ -301,7 +301,7 @@ false	 current: 2020
 
 查看`AtomicInteger.getAndIncrement()`方法，发现其没有加`synchronized`**也实现了同步**。这是为什么？
 
-### CAS底层原理
+### 2.1 CAS底层原理
 
 `AtomicInteger`内部维护了`volatile int value`和`private static final Unsafe unsafe`两个比较重要的参数。
 
@@ -336,7 +336,7 @@ public final int getAndAddInt(Object var1, long var2, int var4) {
 
  5.线程A重新获取`value`值,因为变量`value`是`volatile`修饰,所以其他线程对他的修改,线程A总是能够看到,线程A继续执行`compareAndSwapInt`方法进行比较替换,直到成功.
 
-### CAS缺点
+### 2.2 CAS缺点
 
 > + 循环时间长开销很大
 > + 只能保证一个共享变量的原子性, 多个变量依然要加锁
@@ -377,7 +377,79 @@ false	User{name='li4', age=25}
 AtomicStampedReference.compareAndSet(expectedReference,newReference,oldStamp,newStamp);
 ```
 
+详见[ABADemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/ABADemo.java)
 
+## 4. 集合类不安全问题
+
+### 4.1 List
+
+`ArrayList`不是线程安全类，在多线程同时写的情况下，会抛出`java.util.ConcurrentModificationException`异常。
+
+```java
+public class ContainerNotSafeDemo {
+
+    public static void main(String[] args) {
+        List<String> list = new ArrayList<>();
+
+        for (int i = 0; i < 30; i++){
+            new Thread(() -> {
+                list.add(UUID.randomUUID().toString().substring(0,8));
+                System.out.println(list);
+            },String.valueOf(i)).start();
+        }
+    }
+}
+```
+
+解决方法: 
+
+- 使用`Vector`（`ArrayList`所有方法加`synchronized`，太重）。
+- 使用`Collections.synchronizedList()`转换成线程安全类。
+- 使用`java.concurrent.CopyOnWriteArrayList`（推荐）。
+
+#### 4.1.1 CopyOnWriteArrayList
+
+这是JUC的类，通过**写时复制**来实现**读写分离**。比如其`add()`方法，就是先**复制**一个新数组，长度为原数组长度+1，然后将新数组最后一个元素设为添加的元素。
+
+```java
+public boolean add(E e) {
+        final ReentrantLock lock = this.lock;
+        lock.lock();
+        try {
+            // 获取数组
+            Object[] elements = getArray();
+            int len = elements.length;
+            // 复制数组得到新数组
+            Object[] newElements = Arrays.copyOf(elements, len + 1);
+            // 把要添加的元素设置到新数组最后一个位置
+            newElements[len] = e;
+            // 设置新数组
+            setArray(newElements);
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+```
+
+### 4.2 Set
+
+跟List类似，`HashSet`和`TreeSet`都不是线程安全的，与之对应的有`CopyOnWriteSet`这个线程安全类。这个类底层维护了一个`CopyOnWriteArrayList`数组。
+
+```java
+	private final CopyOnWriteArrayList<E> al;
+    public CopyOnWriteArraySet() {
+        al = new CopyOnWriteArrayList<E>();
+    }
+```
+
+#### 4.2.1 HashSet和HashMap
+
+`HashSet`底层是用`HashMap`实现的。既然是用`HashMap`实现的，那`HashMap.put()`需要传**两个参数**，而`HashSet.add()`只**传一个参数**，这是为什么？实际上`HashSet.add()`就是调用的`HashMap.put()`，只不过**Value**被写死了，是一个`private static final Object`对象。
+
+### 4.3 Map
+
+`HashMap`不是线程安全的，`Hashtable`是线程安全的，但是跟`Vector`类似，太重量级。所以也有类似CopyOnWriteMap，只不过叫`ConcurrentHashMap`。
 
 
 
