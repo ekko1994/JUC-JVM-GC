@@ -280,6 +280,109 @@ instance=memory;//3.设置instance的指向刚分配的内存地址,此时instan
 
 解决的方法就是对`singletondemo`对象添加上`volatile`关键字，禁止指令重排。
 
+## 2. CAS你知道吗
+
+CAS的全称为**Compare-And-Swap**，它是一条CPU并发原语。它的功能是判断主内存某个位置的值是否为预期值，如果是则更改为新的值, 否则一直重试，直到一致为止。
+
+```java
+		AtomicInteger atomicInteger = new AtomicInteger(5);
+        System.out.println(atomicInteger.compareAndSet(5, 2020) + "\t current: "+atomicInteger.get());
+        System.out.println(atomicInteger.compareAndSet(5, 2020) + "\t current: "+atomicInteger.get());
+```
+
+运行结果: 
+
+```java
+true	 current: 2020
+false	 current: 2020
+```
+
+第一次修改，期望值为5，主内存也为5，修改成功，为2020。第二次修改，期望值为5，主内存为2020，修改失败。
+
+查看`AtomicInteger.getAndIncrement()`方法，发现其没有加`synchronized`**也实现了同步**。这是为什么？
+
+### CAS底层原理
+
+`AtomicInteger`内部维护了`volatile int value`和`private static final Unsafe unsafe`两个比较重要的参数。
+
+```java
+public final int getAndIncrement() {
+    return unsafe.getAndAddInt(this, valueOffset, 1);
+}
+```
+
+`AtomicInteger.getAndIncrement()`调用了`Unsafe.getAndAddInt()`方法。`Unsafe`类的大部分方法都是`native`的，用来像C语言一样从底层操作内存。
+
+```java
+public final int getAndAddInt(Object var1, long var2, int var4) {
+    int var5;
+    do {
+        var5 = this.getIntVolatile(var1, var2);
+    } while(!this.compareAndSwapInt(var1, var2, var5, var5 + var4));
+
+    return var5;
+}
+```
+
+假设线程A和线程B两个线程同时执行getAndAddInt操作(分别在不同的CPU上):
+
+1.`AtomicInteger`里面的`value`原始值为3,即主内存中`AtomicInteger`的`value`为3,根据JMM模型,线程A和线程B各自持有一份值为3的`value`的副本分别到各自的工作内存.
+
+2.线程A通过`getIntVolatile(var1,var2) `拿到value值3,这是线程A被挂起.
+
+3.线程B也通过`getIntVolatile(var1,var2) `拿到value值3,此时刚好线程B没有被挂起并执行`compareAndSwapInt`方法比较内存中的值也是3 成功修改内存的值为4 线程B打完收工 一切OK.
+
+ 4.这是线程A恢复,执行`compareAndSwapInt`方法比较,发现自己手里的数值和内存中的数字4不一致,说明该值已经被其他线程抢先一步修改了,那A线程修改失败,只能重新来一遍了.
+
+ 5.线程A重新获取`value`值,因为变量`value`是`volatile`修饰,所以其他线程对他的修改,线程A总是能够看到,线程A继续执行`compareAndSwapInt`方法进行比较替换,直到成功.
+
+### CAS缺点
+
+> + 循环时间长开销很大
+> + 只能保证一个共享变量的原子性, 多个变量依然要加锁
+> + 引出来**ABA问题**
+
+## 3. 原子类AtomicInteger的ABA问题
+
+所谓ABA问题，就是比较并交换的循环，存在一个**时间差**，而这个时间差可能带来意想不到的问题。比如线程T1将值从A改为B，然后又从B改为A。线程T2看到的就是A，但是**却不知道这个A发生了更改**。尽管线程T2 CAS操作成功，但不代表就没有问题。 有的需求，比如CAS，**只注重头和尾**，只要首尾一致就接受。但是有的需求，还看重过程，中间不能发生任何修改，这就引出了`AtomicReference`原子引用。
+
+### 3.1 AtomicReference
+
+`AtomicInteger`对整数进行原子操作，如果是一个POJO呢？可以用`AtomicReference`来包装这个POJO，使其操作原子化。
+
+```java
+		User zs = new User("z3",22);
+        User li4 = new User("li4",25);
+
+        AtomicReference<User> userAtomicReference = new AtomicReference<>();
+        userAtomicReference.set(zs);
+
+        System.out.println(userAtomicReference.compareAndSet(zs,li4) + "\t" + userAtomicReference.get().toString());
+        System.out.println(userAtomicReference.compareAndSet(zs,li4) + "\t" + userAtomicReference.get().toString());
+
+```
+
+运行结果: 
+
+```java
+true	User{name='li4', age=25}
+false	User{name='li4', age=25}
+```
+
+### 3.2 ABA问题的解决
+
+使用`AtomicStampedReference`类可以解决ABA问题。这个类维护了一个“**版本号**”Stamp，在进行CAS操作的时候，不仅要比较当前值，还要比较**版本号**。只有两者都相等，才执行更新操作。
+
+```java
+AtomicStampedReference.compareAndSet(expectedReference,newReference,oldStamp,newStamp);
+```
+
+
+
+
+
+
+
 
 
 
