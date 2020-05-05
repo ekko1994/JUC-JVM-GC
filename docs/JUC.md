@@ -491,7 +491,7 @@ try{
 }
 ```
 
-
+详见[ReentrantLockDemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/ReentrantLockDemo.java)
 
 ### 5.3 自旋锁
 
@@ -502,13 +502,13 @@ try{
 while (!atomicReference.compareAndSet(null, thread)) { }
 ```
 
-
+详见[SpinLockDemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/SpinLockDemo.java)
 
 ### 5.4 独占锁(写)/共享锁(读)/互斥锁
 
 **读锁**是**共享的**，**写锁**是**独占的**。`java.util.concurrent.locks.ReentrantLock`和`synchronized`都是**独占锁**，独占锁就是**一个锁**只能被**一个线程**所持有。有的时候，需要**读写分离**，那么就要引入读写锁，即`java.util.concurrent.locks.ReentrantReadWriteLock`。
 
-
+详见[ReadWriteLockDemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/ReadWriteLockDemo.java)
 
 
 
