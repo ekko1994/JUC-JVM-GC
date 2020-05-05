@@ -20,7 +20,7 @@ JMM关于同步规定:
 
 由于JVM运行程序的实体是线程,而每个线程创建时JVM都会为其创建一个工作内存(有些地方成为栈空间),工作内存是每个线程的私有数据区域,而Java内存模型中规定所有变量都存储在主内存,主内存是共享内存区域,所有线程都可访问,但线程对变量的操作(读取赋值等)必须在工作内存中进行,首先要将变量从主内存拷贝到自己的工作空间,然后对变量进行操作,操作完成再将变量写回主内存,不能直接操作主内存中的变量,各个线程中的工作内存储存着主内存中的变量副本拷贝,因此不同的线程无法访问对方的工作内存,线程间的通讯(传值) 必须通过主内存来完成,其简要访问过程如下图:
 
-		<div align=center>![JMM](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/JMM.jpg)</div>
+	<img src="https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/JMM.jpg" width="XXX" height="XXX" /></div>
 
 
 
