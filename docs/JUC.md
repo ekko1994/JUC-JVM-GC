@@ -414,24 +414,24 @@ public class ContainerNotSafeDemo {
 这是JUC的类，通过**写时复制**来实现**读写分离**。比如其`add()`方法，就是先**复制**一个新数组，长度为原数组长度+1，然后将新数组最后一个元素设为添加的元素。
 
 ```java
-	public boolean add(E e) {
-        final ReentrantLock lock = this.lock;
-        lock.lock();
-        try {
-            // 获取数组
-            Object[] elements = getArray();
-            int len = elements.length;
-            // 复制数组得到新数组
-            Object[] newElements = Arrays.copyOf(elements, len + 1);
-            // 把要添加的元素设置到新数组最后一个位置
-            newElements[len] = e;
-            // 设置新数组
-            setArray(newElements);
-            return true;
-        } finally {
-            lock.unlock();
-        }
+public boolean add(E e) {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        // 获取数组
+        Object[] elements = getArray();
+        int len = elements.length;
+        // 复制数组得到新数组
+        Object[] newElements = Arrays.copyOf(elements, len + 1);
+        // 把要添加的元素设置到新数组最后一个位置
+        newElements[len] = e;
+        // 设置新数组
+        setArray(newElements);
+        return true;
+    } finally {
+        lock.unlock();
     }
+}
 ```
 
 ### 4.2 Set
@@ -439,10 +439,10 @@ public class ContainerNotSafeDemo {
 跟List类似，`HashSet`和`TreeSet`都不是线程安全的，与之对应的有`CopyOnWriteSet`这个线程安全类。这个类底层维护了一个`CopyOnWriteArrayList`数组。
 
 ```java
-	private final CopyOnWriteArrayList<E> al;
-    public CopyOnWriteArraySet() {
-        al = new CopyOnWriteArrayList<E>();
-    }
+private final CopyOnWriteArrayList<E> al;
+public CopyOnWriteArraySet() {
+    al = new CopyOnWriteArrayList<E>();
+}
 ```
 
 #### 4.2.1 HashSet和HashMap
@@ -491,6 +491,8 @@ try{
 }
 ```
 
+
+
 ### 5.3 自旋锁
 
 所谓自旋锁，就是尝试获取锁的线程不会**立即阻塞**，而是采用**循环的方式去尝试获取**。自己在那儿一直循环获取，就像“**自旋**”一样。这样的好处是减少**线程切换的上下文开销**，缺点是会**消耗CPU**。CAS底层的`getAndAddInt`就是**自旋锁**思想。
@@ -501,6 +503,10 @@ while (!atomicReference.compareAndSet(null, thread)) { }
 ```
 
 
+
+### 5.4 独占锁(写)/共享锁(读)/互斥锁
+
+**读锁**是**共享的**，**写锁**是**独占的**。`java.util.concurrent.locks.ReentrantLock`和`synchronized`都是**独占锁**，独占锁就是**一个锁**只能被**一个线程**所持有。有的时候，需要**读写分离**，那么就要引入读写锁，即`java.util.concurrent.locks.ReentrantReadWriteLock`。
 
 
 
