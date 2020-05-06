@@ -510,7 +510,69 @@ while (!atomicReference.compareAndSet(null, thread)) { }
 
 详见[ReadWriteLockDemo](https://github.com/jackhusky/JUC-JVM-GC/blob/master/src/juc/ReadWriteLockDemo.java)
 
+## 6. CountDownLatch/CyclicBarrier/Semaphore使用过吗?
 
+###6.1 CountDownLatch
 
+`CountDownLatch`内部维护了一个**计数器**，只有当**计数器==0**时，某些线程才会停止阻塞，开始执行。
 
+`CountDownLatch`主要有两个方法，`countDown()`来让计数器-1，`await()`来让线程阻塞。当`count==0`时，阻塞线程自动唤醒。
+
+**案例一班长关门**：main线程是班长，6个线程是学生。只有6个线程运行完毕，都离开教室后，main线程班长才会关教室门。
+
+**案例二秦灭六国**：只有6国都被灭亡后（执行完毕），main线程才会显示“秦国一统天下”。
+
+**枚举类的使用**
+
+在**案例二**中会使用到枚举类，因为灭六国，循环6次，想根据`i`的值来确定输出什么国，比如1代表楚国，2代表赵国。如果用判断则十分繁杂，而枚举类可以简化操作。
+
+枚举类就像一个**简化的数据库**，枚举类名就像数据库名，枚举的项目就像数据表，枚举的属性就像表的字段。
+
+关于`CountDownLatch`和枚举类的使用，请看 [CountDownLatchDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/CountDownLatchDemo.java)
+
+### 6.2 CyclicBarrier
+
+`CountDownLatch`是减，而`CyclicBarrier`是加，理解了`CountDownLatch`，`CyclicBarrier`就很容易。比如召集7颗龙珠才能召唤神龙，详见[CyclicBarrierDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/CyclicBarrierDemo.java)。
+
+### 6.3 Semaphore
+
+`CountDownLatch`的问题是**不能复用**。比如`count=3`，那么加到3，就不能继续操作了。而`Semaphore`可以解决这个问题，比如6辆车3个停车位，对于`CountDownLatch`**只能停3辆车**，而`Semaphore`可以停6辆车，车位空出来后，其它车可以占有，这就涉及到了`Semaphore.accquire()`和`Semaphore.release()`方法。
+
+```java
+public static void main(String[] args) {
+    // 模拟三个车位
+    Semaphore semaphore = new Semaphore(3);
+    // 模拟六辆车子抢占车位
+    for (int i = 0; i < 6; i++){
+        new Thread(() -> {
+            try {
+                // 抢占资源
+                semaphore.acquire();
+                System.out.println(Thread.currentThread().getName()+"\t 抢到车位");
+                try { TimeUnit.SECONDS.sleep(3); } catch (InterruptedException e) { e.printStackTrace(); }
+                System.out.println(Thread.currentThread().getName()+"\t 三秒后离开车位");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                // 释放资源
+                semaphore.release();
+            }
+        },String.valueOf(i)).start();
+    }
+}
+
+运行结果: 
+0	 抢到车位
+1	 抢到车位
+2	 抢到车位
+0	 三秒后离开车位
+3	 抢到车位
+2	 三秒后离开车位
+1	 三秒后离开车位
+4	 抢到车位
+5	 抢到车位
+3	 三秒后离开车位
+5	 三秒后离开车位
+4	 三秒后离开车位
+```
 
