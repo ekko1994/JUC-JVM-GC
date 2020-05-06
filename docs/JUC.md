@@ -576,3 +576,147 @@ public static void main(String[] args) {
 4	 三秒后离开车位
 ```
 
+## 7. 阻塞队列
+
+**概念: ** 当阻塞队列为空时，获取（take）操作是阻塞的；当阻塞队列为满时，添加（put）操作是阻塞的。
+
+**好处**：阻塞队列不用手动控制什么时候该被阻塞，什么时候该被唤醒，简化了操作。
+
+**体系**：`Collection`→`Queue`→`BlockingQueue`→七个阻塞队列实现类。
+
+| 类名                    | 作用                             |
+| ----------------------- | -------------------------------- |
+| **ArrayBlockingQueue**  | 由**数组**构成的**有界**阻塞队列 |
+| **LinkedBlockingQueue** | 由**链表**构成的**有界**阻塞队列 |
+| PriorityBlockingQueue   | 支持优先级排序的无界阻塞队列     |
+| DelayQueue              | 支持优先级的延迟无界阻塞队列     |
+| **SynchronousQueue**    | 单个元素的阻塞队列               |
+| LinkedTransferQueue     | 由链表构成的无界阻塞队列         |
+| LinkedBlockingDeque     | 由链表构成的双向阻塞队列         |
+
+粗体标记的三个用得比较多，许多消息中间件底层就是用它们实现的。
+
+需要注意的是`LinkedBlockingQueue`虽然是有界的，但有个巨坑，其默认大小是`Integer.MAX_VALUE`，高达21亿，一般情况下内存早爆了（在线程池的`ThreadPoolExecutor`有体现）。
+
+**API**：抛出异常是指当队列满时，再次插入会抛出异常；返回布尔是指当队列满时，再次插入会返回false；阻塞是指当队列满时，再次插入会被阻塞，直到队列取出一个元素，才能插入。超时是指当一个时限过后，才会插入或者取出。API使用见[BlockingQueueDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/BlockingQueueDemo.java)。
+
+| 方法类型 | 抛出异常  | 返回布尔   | 阻塞     | 超时                     |
+| -------- | --------- | ---------- | -------- | ------------------------ |
+| 插入     | add(E e)  | offer(E e) | put(E e) | offer(E e,Time,TimeUnit) |
+| 取出     | remove()  | poll()     | take()   | poll(Time,TimeUnit)      |
+| 队首     | element() | peek()     | 无       | 无                       |
+
+### SynchronousQueue
+
+`SynchronousQueue`没有容量, 与其他`BlcokingQueue`不同,`SynchronousQueue`是一个不存储元素的`BlcokingQueue`, 每个`put`操作必须要等待一个`take`操作, 否则不能继续添加元素, 反之亦然.
+
+详见 [SynchronousQueueDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/SynchronousQueueDemo.java)
+
+### 阻塞队列的应用——生产者消费者
+
+#### 传统模式
+
+传统模式使用`Lock`来进行操作，需要手动加锁、解锁。详见[ProdConsumer_TraditionDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/ProdConsumer_TraditionDemo.java)。
+
+```java
+private int num = 0;
+Lock lock = new ReentrantLock();
+Condition condition = lock.newCondition();
+
+public void increment()throws Exception{
+    lock.lock();
+    try {
+        // 判断
+        while (0 != num){
+            // 等待,不能生产消息
+            condition.await();
+        }
+        // 干活
+        num++;
+        System.out.println(Thread.currentThread().getName()+"\t"+num);
+        // 唤醒
+        condition.signalAll();
+    } catch (Exception e) {
+        e.printStackTrace();
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+
+
+`synchronized`和`Lock`有什么区别?
+
+- `synchronized`属于JVM层面是关键字, `ReentrantLock`属于API层面是具体的类
+- `synchronized` 不需要手动释放锁, 当`synchronized` 代码执行完后系统会自动让线程释放对锁的占用, `ReentrantLock`需要手动释放锁, 如果没有释放锁, 就有可能出现死锁现象.
+- `synchronized` 不可中断, 除非抛出异常或者正常运行完成, `ReentrantLock`可中断, 设置超时方法或者调用interrupt()方法可中断
+- `synchronized` 非公平锁, `ReentrantLock`两者都可以,默认非公平锁.
+- 锁绑定多个条件`Condition`: `synchronized` 没有,`ReentrantLock`用来实现分组唤醒需要唤醒的线程们, 可以精确唤醒, 而不是像`synchronized` 要么随机唤醒一个线程要么唤醒全部线程. 详见[SyncAndReentrantLockDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/SyncAndReentrantLockDemo.java)
+
+####阻塞队列模式
+
+使用阻塞队列就不需要手动加锁了，详见[ProdConsumerBlockQueueDemo](https://github.com/jackhusky/JUC-JVM-GC/tree/master/src/juc/ProdConsumerBlockQueueDemo.java)
+
+```java
+public void myProd() throws InterruptedException {
+    boolean offer;
+    String data = atomicInteger.incrementAndGet()+"";
+    while (flag){
+        offer = blockingQueue.offer(data, 2L, TimeUnit.SECONDS);
+        if (offer){
+            System.out.println(Thread.currentThread().getName()+"\t 插入队列"+data+"成功");
+        }else{
+            System.out.println(Thread.currentThread().getName()+"\t 插入队列"+data+"失败");
+        }
+        try { TimeUnit.SECONDS.sleep(1); } catch (InterruptedException e) { e.printStackTrace(); }
+    }
+    System.out.println(Thread.currentThread().getName()+"\t flag = "+ flag + "不再生产!");
+}
+
+public void myConsumer() throws InterruptedException {
+    String value = null;
+    while (flag){
+        value = blockingQueue.poll(2L, TimeUnit.SECONDS);
+        if (null == value || "".equalsIgnoreCase(value)){
+            flag = false;
+            System.out.println(Thread.currentThread().getName()+"\t 超过两秒钟了,消费退出");
+            return;
+        }
+        System.out.println(Thread.currentThread().getName()+"\t 消费成功");
+    }
+}
+```
+
+## 8. Callable接口
+
+**与Runnable的区别**：
+
+1. Callable带返回值。
+2. 会抛出异常。
+3. 覆写`call()`方法，而不是`run()`方法。
+
+```java
+public class CallableDemo {
+    //实现Callable接口
+    class MyThread implements Callable<Integer> {
+        @Override
+        public Integer call() throws Exception {
+            System.out.println("callable come in ...");
+            return 1024;
+        }
+    }
+    
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        //创建FutureTask类，接受MyThread。    
+        FutureTask<Integer> futureTask = new FutureTask<>(new MyThread());
+        //将FutureTask对象放到Thread类的构造器里面。
+        new Thread(futureTask, "AA").start();
+        int result01 = 100;
+        //用FutureTask的get方法得到返回值。
+        int result02 = futureTask.get();
+        System.out.println("result=" + (result01 + result02));
+    }
+}
+```
+
