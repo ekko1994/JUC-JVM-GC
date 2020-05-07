@@ -720,3 +720,162 @@ public class CallableDemo {
 }
 ```
 
+## 9. 阻塞队列的应用——线程池
+
+**概念**：线程池主要是控制运行线程的数量，将待处理任务放到等待队列，然后创建线程执行这些任务。如果超过了最大线程数，则等待。
+
+**优点**：
+
+1. 线程复用：不用一直new新线程，重复利用已经创建的线程来降低线程的创建和销毁开销，节省系统资源。
+2. 提高响应速度：当任务达到时，不用创建新的线程，直接利用线程池的线程。
+3. 管理线程：可以控制最大并发数，控制线程的创建等。
+
+**体系**：`Executor`→`ExecutorService`→`AbstractExecutorService`→`ThreadPoolExecutor`。`ThreadPoolExecutor`是线程池创建的核心类。类似`Arrays`、`Collections`工具类，`Executor`也有自己的工具类`Executors`。
+
+### 9.1 常用线程池编码实现
+
+`Executors.newFixedThreadPool()` : 使用`LinkedBlockingQueue`实现，定长线程池。
+
+```java
+public static ExecutorService newFixedThreadPool(int nThreads) {
+    return new ThreadPoolExecutor(nThreads, nThreads,
+                                  0L, TimeUnit.MILLISECONDS,
+                                  new LinkedBlockingQueue<Runnable>());
+}
+```
+
+`Executors.newSingleThreadExecutor()` : 使用`LinkedBlockingQueue`实现，一池只有一个线程。
+
+```java
+public static ExecutorService newSingleThreadExecutor() {
+    return new FinalizableDelegatedExecutorService
+        (new ThreadPoolExecutor(1, 1,
+                                0L, TimeUnit.MILLISECONDS,
+                                new LinkedBlockingQueue<Runnable>()));
+}
+```
+
+`Executors.newCachedThreadPool() `: 使用`SynchronousQueue`实现，变长线程池。
+
+```java
+public static ExecutorService newCachedThreadPool() {
+    return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                  60L, TimeUnit.SECONDS,
+                                  new SynchronousQueue<Runnable>());
+}
+```
+
+### 9.2 线程池创建的七个参数
+
+| 参数            | 意义                       |
+| --------------- | -------------------------- |
+| corePoolSize    | 线程池常驻核心线程数       |
+| maximumPoolSize | 能够容纳的最大线程数       |
+| keepAliveTime   | 空闲线程存活时间           |
+| unit            | 存活时间单位               |
+| workQueue       | 存放提交但未执行任务的队列 |
+| threadFactory   | 创建线程的工厂类           |
+| handler         | 等待队列满后的拒绝策略     |
+
+**理解**：线程池 --> **银行网点**。
+
+`corePoolSize`就像银行的“**当值窗口**“，比如今天有**2位柜员**在受理**客户请求**（任务）。如果超过2个客户，那么新的客户就会在**等候区**（等待队列`workQueue`）等待。当**等候区**也满了，这个时候就要开启“**加班窗口**”，让其它3位柜员来加班，此时达到**最大窗口**`maximumPoolSize`，为5个。如果开启了所有窗口，等候区依然满员，此时就应该启动”**拒绝策略**“`handler`，告诉不断涌入的客户，叫他们不要进入，已经爆满了。由于不再涌入新客户，办完事的客户增多，窗口开始空闲，这个时候就通过`keepAlivetTime`将多余的3个”加班窗口“取消，恢复到2个”当值窗口“。
+
+### 9.3 线程池底层原理
+
+![线程池原理1](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/线程池底层原理1.png)
+
+![线程池原理2](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/线程池底层原理2.jpg)
+
+- 在创建了线程池后，等待提交过来的任务请求
+- 当调用`execute() `方法添加一个请求任务时，线程池会做如下判断：
+  - 如果正在运行的线程数量小于`corePoolSize`，那么马上创建线程运行这个任务；
+  - 如果正在运行的线程数量大于或等于`corePoolSize`，那么将这个任务放入队列；
+  - 如果这时候队列满了且正在运行的线程数量还小于`maximumPoolSize`，那么还是要创建非核心线程立刻运行这个任务；
+  - 如果队列满了且正在运行的线程数量大于或等于`maximumPoolSize`，那么线程池会启动饱和拒绝策略来执行。
+- 当一个线程完成任务时，他会从队列中取下一个任务来执行。
+- 当一个线程无事可做超过一定的时间(`keepAliveTime`)时，线程池会判断：
+  - 如果当前运行的线程数大于`corePoolSize`，那么这个线程就被停掉。
+  - 所以线程池的所有任务完成后它最终会收缩到`corePoolSize`的大小。
+
+### 9.4 线程池的拒绝策略
+
+当等待队列满时，且达到最大线程数，再有新任务到来，就需要启动拒绝策略。JDK提供了四种拒绝策略，分别是：
+
+1. **AbortPolicy**：默认的策略，直接抛出`RejectedExecutionException`异常，阻止系统正常运行。
+2. **CallerRunsPolicy**：既不会抛出异常，也不会终止任务，而是将任务返回给调用者。
+3. **DiscardOldestPolicy**：抛弃队列中等待最久的任务，然后把当前任务加入队列中尝试再次提交任务。
+4. **DiscardPolicy**：直接丢弃任务，不做任何处理。
+
+### 9.5 实际生产使用哪一个线程池？
+
+`newFixedThreadPool()，newSingleThreadExecutor()，newCachedThreadPool()`都不用，原因就是`FixedThreadPool`和`SingleThreadExecutor`底层都是用`LinkedBlockingQueue`实现的，这个队列最大长度为`Integer.MAX_VALUE`，显然会导致OOM。所以实际生产一般自己通过`ThreadPoolExecutor`的7个参数，自定义线程池。
+
+```java
+	ThreadPoolExecutor threadPool = new ThreadPoolExecutor(2,
+                5,
+                1L,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<Runnable>(3),
+                Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.DiscardPolicy());
+```
+
+**自定义线程池参数选择**：对于CPU密集型任务，最大线程数是CPU线程数+1。对于IO密集型任务，尽量多配点，可以是CPU线程数*2，或者CPU线程数/(1-阻塞系数)。
+
+> Systemout.println(Runtime.getRuntime().availableProcessors()); 查看CPU核数.
+>
+> CPU密集型: 该任务需要大量的运算，而没有阻塞，CPU全速运行。一般公式：CPU核数+1一个线程的线程池
+>
+> IO密集型：该任务需要大量的IO，即大量的阻塞，故需要多配置线程数。在IO密集型任务中使用多线程可以大大的加速程序运行，即使在单核CPU上，这种加速主要就是利用了被浪费掉的阻塞时间。参考公式：CPU核数/1-阻塞系数（阻塞系数在0.8~0.9之间）比如8核CPU：8/1-0.9=80个线程数
+
+## 10. 死锁编码和定位
+
+```java
+private String lockA;
+private String lockB;
+
+public HoldLockThread(String lockA, String lockB) {
+    this.lockA = lockA;
+    this.lockB = lockB;
+}
+
+@Override
+public void run() {
+    synchronized (lockA){
+        System.out.println(Thread.currentThread().getName()+"\t 自己持有: "+lockA + "\t 尝试获得: "+lockB);
+        try { TimeUnit.SECONDS.sleep(2); } catch (InterruptedException e) { e.printStackTrace(); }
+        synchronized (lockB){
+            System.out.println(Thread.currentThread().getName()+"\t 自己持有: "+lockB + "\t 尝试获得: "+lockA);
+        }
+    }
+}
+```
+
+主要是两个命令配合起来使用，定位死锁。
+
+**jps**指令：`jps -l`可以查看运行的Java进程。
+
+```shell
+1244 org.jetbrains.jps.cmdline.Launcher
+14492 juc.DeadLockDemo
+```
+
+**jstack**指令：`jstack pid`可以查看某个Java进程的堆栈信息，同时分析出死锁。
+
+```shell
+===================================================
+"BBB":
+        at juc.HoldLockThread.run(DeadLockDemo.java:22)
+        - waiting to lock <0x000000076b57fb10> (a java.lang.String)
+        - locked <0x000000076b57fb48> (a java.lang.String)
+        at java.lang.Thread.run(Thread.java:748)
+"AAA":
+        at juc.HoldLockThread.run(DeadLockDemo.java:22)
+        - waiting to lock <0x000000076b57fb48> (a java.lang.String)
+        - locked <0x000000076b57fb10> (a java.lang.String)
+        at java.lang.Thread.run(Thread.java:748)
+
+Found 1 deadlock.
+```
+
