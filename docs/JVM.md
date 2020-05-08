@@ -16,7 +16,7 @@
 
   > 这个算法的基本思路就是通过一系列的称为“GC Roots”的对象作为起始点，从这些节点开始向下搜索，搜索所走过的路径称为引用链，当一个对象到GC Roots没有任何引用链相连时，则证明此对象是不可用的。
 
-  ![GC Roots](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC Roots.bmp)
+  ![GC Roots](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_Roots.bmp)
 
 ### 2.2 哪些对象可以作为GC Roots？
 
@@ -336,7 +336,7 @@ java.lang.ref.PhantomReference@74a14482
 
 ### 5.5 小总结
 
-![GC Roots 以及四大引用](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC Root以及四大引用.bmp)
+![GC Roots 以及四大引用](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_Root以及四大引用.bmp)
 
 ## 6. 请谈谈你对OOM的认识
 
