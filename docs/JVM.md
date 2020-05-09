@@ -359,3 +359,192 @@ public class StackOverFlowDemo {
 }
 ```
 
+### 6.2 Java.lang.OutOfMemoryError:Java heap space
+
+```java
+public class JavaHeapSpaceDemo {
+    public static void main(String[] args) {
+        String str = "aaa";
+        while (true){
+            str += str + new Random().nextInt(11111111) + new Random().nextInt(22222222);
+            str.intern();
+        }
+    }
+}
+```
+
+### 6.3 java.lang.OutOfMemoryError: GC overhead limit exceeded
+
+这个错误是指：GC的时候会有“Stop the World"，STW越小越好，正常情况是GC只会占到很少一部分时间。但是如果用超过98%的时间来做GC，而且收效甚微，就会被JVM叫停。下例中，执行了多次`Full GC`，但是内存回收很少，最后抛出了`OOM:GC overhead limit exceeded`错误。
+
+```java
+public class GCOverheadDemo {
+    public static void main(String[] args) {
+        int i = 0;
+        List<String> list = new ArrayList<>();
+        try {
+            while (true) {
+                list.add(String.valueOf(++i).intern());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("************i" + i);
+            throw e;
+        }
+    }
+}
+```
+
+### 6.4 Java.lang.OutOfMemeoryError:GC overhead limit exceeded
+
+这个错误是指：GC的时候会有“Stop the World"，STW越小越好，正常情况是GC只会占到很少一部分时间。但是如果用超过98%的时间来做GC，而且收效甚微，就会被JVM叫停。下例中，执行了多次`Full GC`，但是内存回收很少，最后抛出了`OOM:GC overhead limit exceeded`错误。
+
+```java
+// 参数配置: -Xms10m -Xmx10m -XX:MaxDirectMemorySize=5m -XX:+PrintGCDetails
+public class GCOverheadDemo {
+    public static void main(String[] args) {
+        int i = 0;
+        List<String> list = new ArrayList<>();
+        try {
+            while (true) {
+                list.add(String.valueOf(++i).intern());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("************i" + i);
+            throw e;
+        }
+    }
+}
+```
+
+### 6.5 Java.lang.OutOfMemeoryError:Direct buffer memory
+
+在写`NIO`程序的时候，会用到`ByteBuffer`来读取和存入数据。与Java堆的数据不一样，`ByteBuffer`使用`native`方法，直接在**堆外分配内存**。当堆外内存（也即本地物理内存）不够时，就会抛出这个异常。
+
+```java
+// -Xms10m -Xmx10m -XX:MaxDirectMemorySize=5m -XX:+PrintGCDetails
+public class DirectBufferMemoryDemo {
+    public static void main(String[] args) {
+        System.out.println("配置的maxDirectMemory: " + (sun.misc.VM.maxDirectMemory() / (double) 1024 / 1024) + "MB");
+        try {
+            Thread.sleep(300);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(6 * 1024 * 1024);
+    }
+}
+```
+
+### 6.6 java.lang.OutOfMemoryError: unable to create new native thread
+
+在高并发应用场景时，如果创建超过了系统默认的最大线程数，就会抛出该异常。Linux单个进程默认不能超过1024个线程。**解决方法**要么降低程序线程数，要么修改系统最大线程数`vim /etc/security/limits.d/20-nproc.conf`。
+
+```java
+public class UnableCreateNewThreadDemo {
+    public static void main(String[] args) {
+        for (int i = 0; ; i++) {
+            System.out.println("***********" + i);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(Integer.MAX_VALUE);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }, "" + i).start();
+        }
+    }
+}
+```
+
+```shell
+***********4066
+***********4067
+***********4068
+***********4069
+***********4070
+***********4071
+***********4072
+***********4073
+***********4074
+***********4075
+***********4076
+Exception in thread "main" java.lang.OutOfMemoryError: unable to create new native thread
+	at java.lang.Thread.start0(Native Method)
+	at java.lang.Thread.start(Thread.java:714)
+	at jvm.UnableCreateNewThreadDemo.main(UnableCreateNewThreadDemo.java:17)
+^CJava HotSpot(TM) 64-Bit Server VM warning: Exception java.lang.OutOfMemoryError occurred dispatching signal SIGINT to handler- the VM may need to be forcibly terminated
+已杀死
+[jack@centos7 opt]$ ulimit -u
+4096
+[jack@centos7 opt]$ vim /etc/security/limits.
+limits.conf  limits.d/    
+[jack@centos7 opt]$ vim /etc/security/limits.d/20-nproc.conf 
+
+# Default limit for number of user's processes to prevent
+# accidental fork bombs.
+# See rhbz #432903 for reasoning.
+
+*          soft    nproc     4096
+root       soft    nproc     unlimited
+```
+
+### 6.7 OOM—Metaspace
+
+java 8及以后的版本使用Metaspace来替代永久代，存放:
+
+ * 虚拟机加载的类信息
+ * 常量池
+ * 静态变量
+ * 即时编译后的代码
+
+当元空间满了后，会抛出这个异常。
+
+## 7. GC垃圾回收算法和垃圾收集器
+
+### 7.1 GC垃圾回收算法
+
+GC算法（引用计数/复制/标清/标整）是内存回收的方法论，垃圾收集器就是算法落地实现。
+
+因为目前为止还没有完美的收集器出现，更加没有万能的收集器，只是针对具体应用最合适的收集器，进行分代收集。
+
+分代收集算法就是根据对象的年代，采用上述三种算法来收集。
+
+1. 对于新生代：每次GC都有大量对象死去，存活的很少，常采用复制算法，只需要拷贝很少的对象。
+2. 对于老年代：常采用标整或者标清算法。
+
+### 7.2 垃圾收集器
+
+Java 8可以将垃圾收集器分为四类。
+
+#### 7.2.1 串行收集器Serial
+
+为单线程环境设计且**只使用一个线程**进行GC，会暂停所有用户线程，不适用于服务器。就像去餐厅吃饭，只有一个清洁工在打扫。
+
+#### 7.2.2 并行收集器Parrallel
+
+使用**多个线程**并行地进行GC，会暂停所有用户线程，适用于科学计算、大数据后台，交互性不敏感的场合。多个清洁工同时在打扫。
+
+#### 7.2.3 并发收集器CMS
+
+用户线程和GC线程同时执行（不一定是并行，交替执行执行），GC时不需要停顿用户线程，互联网公司多用，适用对响应时间有要求的场合。清洁工打扫的时候，也可以就餐。
+
+#### 7.2.4 G1收集器
+
+对内存的划分与前面3种很大不同，将堆内存分割成不同的区域，然后并发地进行垃圾回收。
+
+## 8. 怎么查看服务器默认的垃圾收集器是哪个?如何配置？理解?
+### 8.1 默认垃圾收集器
+
+有`Serial`、`Parallel`、`ConcMarkSweep`（CMS）、`ParNew`、`ParallelOld`、`G1`。还有一个`SerialOld`，快被淘汰了。
+
+### 8..2  查看默认垃圾修改器
+
+使用`java -XX:+PrintCommandLineFlags`即可看到，Java 8默认使用`-XX:+UseParallelGC`。
+
+```java
+-XX:InitialHeapSize=266553600 -XX:MaxHeapSize=4264857600 -XX:+PrintCommandLineFlags -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:-Use
+LargePagesIndividualAllocation -XX:+UseParallelGC
+```
+
