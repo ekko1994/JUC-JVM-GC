@@ -548,3 +548,422 @@ Java 8可以将垃圾收集器分为四类。
 LargePagesIndividualAllocation -XX:+UseParallelGC
 ```
 
+### 8.3 七大垃圾收集器
+
+![GC_七大垃圾收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_七大垃圾收集器.bmp)
+
+HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃圾收集器**Deprecated**，不推荐使用。
+
+部分参数说明：
+
+- DefNew：Default New Generation
+
+- Tenured：Old
+- ParNew：Parallel New Generation
+- PSYoungGen：Parallel Scavenge
+- ParOldGen：Parallel Old Generation
+
+#### 8.3.1 Serial收集器
+
+年代最久远，是`Client VM`模式下的默认新生代收集器，使用**复制算法**。**优点**：单个线程收集，没有线程切换开销，拥有最高的单线程GC效率。**缺点**：收集的时候会暂停用户线程。
+
+使用`-XX:+UseSerialGC`可以显式开启，开启后默认使用`Serial`+`SerialOld`的组合。新生代使用复制算法，老年代使用标记-整理算法。
+
+![Serial收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/Serial收集器.jpg)
+
+#### 8.3.2 ParNew收集器
+
+也就是`Serial`的多线程版本，GC的时候不再是一个线程，而是多个，是`Server VM`模式下的默认新生代收集器，采用**复制算法**。默认线程数：ParNew 收集器默认开启和 CPU 数目相同的线程数，可以通过-XX:ParallelGCThreads 参数来限制垃圾收集器的线程数。
+
+使用`-XX:+UseParNewGC`可以显式开启，开启后默认使用`ParNew`+`SerialOld`的组合。但是由于`SerialOld`已经过时，所以建议配合`CMS`使用。新生代使用复制算法，老年代使用标记-整理算法。
+
+> -XX:ParallelGCThreads 限制线程数量，默认开启和CPU数目相同的线程数。
+
+![ParNew收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/ParNew收集器.jpg)
+
+#### 8.3.3 Parallel Scavenge收集器
+
+`ParNew`收集器仅在新生代使用多线程收集，老年代默认是`SerialOld`，所以是单线程收集。而`Parallel Scavenge`在新、老两代都采用多线程收集。`Parallel Scavenge`还有一个特点就是**吞吐量优先收集器**，可以通过自适应调节，保证最大吞吐量。采用**复制算法**。
+
+使用`-XX:+UseParallelGC`或`-XX:+UseParallelOldGC`可以开启， 同时也会使用`ParallelOld`收集老年代。其它参数，比如`-XX:ParallelGCThreads=N`可以选择N个线程进行GC，`-XX:+UseAdaptiveSizePolicy`使用自适应调节策略，`-XX:MaxGCPauseMillis`调整最合适的停顿时间或最大吞吐量。
+
+> -XX:ParallelGCThreads=N 表示启动多少个线程，CPU>8，N=5/8；CPU<8，N=实际个数
+
+![Parallel Scavenge收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/Parallel_Scavenge收集器.jpg)
+
+#### 8.3.4 ParallelOld收集器
+
+`Parallel`的老年代版本，JDK1.6之前，新生代用`Parallel`而老年代用`SerialOld`，只能保证新生代的吞吐量。JDK1.8后，老年代改用`ParallelOld`。
+
+使用`-XX:+UseParallelOldGC`可以开启， 同时也会使用`Parallel`收集新生代。
+
+#### 8.3.5 CMS收集器
+
+并发标记清除收集器，是一种以获得**最短GC停顿为**目标的收集器。适用在互联网或者B/S系统的服务器上，这类应用尤其重视服务器的**响应速度**，希望停顿时间最短。是`G1`收集器出来之前的首选收集器。使用**标清算法**。在GC的时候，会与用户线程并发执行，不会停顿用户线程。但是在**标记**的时候，仍然会**STW**。
+
+使用`-XX:+UseConcMarkSweepGC`开启。开启过后，新生代默认使用`ParNew`，同时老年代使用`SerialOld`作为备用。
+
+![CMS收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/CMS收集器.jpg)
+
+**过程：**
+
+- **初始标记**：标记 GC Roots 能直接关联的对象（*速度很快，需要暂停所有的工作线程*）；
+
+- **并发标记**：进行 GC Roots 跟踪（*和用户线程一起工作，不需要暂停工作线程*）；
+
+- **重新标记**：修正因用户程序继续运行而导致标记产生变动的那一部分对象的标记（*需要暂停所有的工作线程*）；
+
+- **并发清除**：清除 GC Roots 不可达对象（*和用户线程一起工作，不需要暂停工作线程*）。
+
+**优点**：停顿时间少，响应速度快，用户体验好。
+
+**缺点**：
+
+- 对CPU资源非常敏感：由于需要并发工作，多少会占用系统线程资源。
+
+- 无法处理浮动垃圾：由于标记垃圾的时候，用户进程仍然在运行，无法有效处理新产生的垃圾。
+
+- 产生内存碎片：由于使用**标清算法**，会产生内存碎片。
+
+#### 8.3.6 SerialOld收集器
+
+`Serial`的老年代版本，采用**标整算法**。JDK1.5之前跟`Parallel Scavenge`配合使用，现在已经不了，作为`CMS`的后备收集器。
+
+#### 8.3.7 G1收集器
+
+`G1`收集器与之前垃圾收集器的一个显著区别就是——之前收集器都有三个区域，新、老两代和元空间。而G1收集器只有G1区和元空间。而G1区，不像之前的收集器，分为新、老两代，而是一个一个Region，每个Region既可能包含新生代，也可能包含老年代。
+
+`G1`收集器既可以提高吞吐量，又可以减少GC时间。最重要的是**STW可控**，增加了预测机制，让用户指定停顿时间。
+
+使用`-XX:+UseG1GC`开启，还有`-XX:G1HeapRegionSize=n`(1MB~32MB，必须是2的幂，最多设置2048个区域，支持的最大内存为64G内存)、`-XX:MaxGCPauseMillis=n`等参数可调。
+
+**特点**
+
+- **并行和并发**：充分利用多核、多线程CPU，尽量缩短STW。
+
+- **分代收集**：虽然还保留着新、老两代的概念，但物理上不再隔离，而是融合在Region中。
+
+- **空间整合**：`G1`整体上看是**标整**算法，在局部看又是**复制算法**，不会产生内存碎片。
+
+- **可预测停顿**：用户可以指定一个GC停顿时间，`G1`收集器会尽量满足。
+
+**过程**
+
+与`CMS`类似。
+
+- 初始标记。
+
+- 并发标记。
+
+- 最终标记。
+
+- 筛选回收。
+
+**比起CMS有两个优势**：
+
+- G1不会产生内存碎片。
+- 可以精确控制停顿。
+
+#### 8.3.8 小总结
+
+| 收集器                | 串行、并行or并发 | 新生代/老年代 | 算法               | 目标         | 适用场景                                  |
+| :-------------------- | :--------------- | :------------ | :----------------- | :----------- | :---------------------------------------- |
+| **Serial**            | 串行             | 新生代        | 复制算法           | 响应速度优先 | 单CPU环境下的Client模式                   |
+| **Serial Old**        | 串行             | 老年代        | 标记-整理          | 响应速度优先 | 单CPU环境下的Client模式、CMS的后备预案    |
+| **ParNew**            | 并行             | 新生代        | 复制算法           | 响应速度优先 | 多CPU环境时在Server模式下与CMS配合        |
+| **Parallel Scavenge** | 并行             | 新生代        | 复制算法           | 吞吐量优先   | 在后台运算而不需要太多交互的任务          |
+| **Parallel Old**      | 并行             | 老年代        | 标记-整理          | 吞吐量优先   | 在后台运算而不需要太多交互的任务          |
+| **CMS**               | 并发             | 老年代        | 标记-清除          | 响应速度优先 | 集中在互联网站或B/S系统服务端上的Java应用 |
+| **G1**                | 并发             | both          | 标记-整理+复制算法 | 响应速度优先 | 面向服务端应用，将来替换CMS               |
+
+## 9. 生产环境服务器变慢，诊断思路和性能评估谈谈?
+
+### 9.1 top
+
+主要查看`%CPU`、`%MEM`，还有`load average`。`load average`后面的三个数字，表示系统1分钟、5分钟、15分钟的平均负载值。如果三者平均值高于0.6，则复杂比较高了。当然，用`uptime`也可以查看。
+
+```shell
+top - 20:05:49 up  7:22,  6 users,  load average: 1.87, 1.72, 1.30
+Tasks: 241 total,   2 running, 239 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  5.4 us, 12.9 sy,  0.0 ni, 81.4 id,  0.0 wa,  0.0 hi,  0.3 si,  0.0 st
+KiB Mem :  3872604 total,   124072 free,  2659344 used,  1089188 buff/cache
+KiB Swap:  2097148 total,  1394612 free,   702536 used.   893452 avail Mem 
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND                                                                                                                                
+36947 root      20   0 3406084  58616  11996 S  66.1  1.5  10:22.47 java                                                                                                                                   
+36632 root      20   0  158780   5564   4216 D   9.0  0.1   1:35.17 sshd                                                                                                                                   
+ 9764 root      20   0 4237256 528204  10304 S   1.3 13.6   4:20.65 java                                                                                                                                   
+10443 root      20   0 4237212 566096  10220 S   1.3 14.6   4:14.61 java                                                                                                                                   
+ 7105 root      20   0       0      0      0 S   0.7  0.0   0:07.81 kworker/0:1                                                                                                                            
+10012 root      20   0 4274896 786044  10384 S   0.7 20.3   4:32.11 java                
+```
+
+### 9.2 vmstat
+
+查看进程、内存、I/O等多个系统运行状态。2表示每两秒采样一次，3表示一共采样3次。
+
+```shell
+[root@centos7 ~]# vmstat -n 2 3
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 3  0 704840 143448      0 1087420   45   58   211    91   54  320  8  9 79  3  0
+ 2  0 704840 143424      0 1087456    0    0     0    26 4715 4385  5 14 81  0  0
+ 2  0 704840 143424      0 1087460    0    0     0     0 4630 4291  5 13 82  0  0
+```
+
+**procs**：
+
+- r：运行和等待CPU时间片的进程数，原则上1核的CPU的运行队列不要超过2，整个系统的运行队列不能超过总核数的2倍，否则代表系统压力过大。
+- b：等待资源的进程数，比如正在等待磁盘I/O、网络I/O等。
+
+**CPU**：
+
+- us：用户进程消耗CPU时间百分比，us值高，用户进程消耗CPU时间多，如果长期大于50%，优化程序。
+- sy：内核进程消耗的CPU时间百分比。
+- us + sy参考值为80%，如果us + sy大于80%，说明可能存在CPU不足。
+- id：处于空闲的CPU百分比。
+- wa：系统等待IO的CPU时间百分比。
+- st：来自于一个虚拟机偷取的CPU时间的百分比。
+
+>  查看所有CPU核信息：mpstat -P ALL 2
+>
+> 每个进程使用cpu的用量分解信息：pidstat -u 1 -p 进程编号
+
+### 9.3 pidstat
+
+查看某个进程的运行信息。查看CPU：pidstat -u 1 -p 进程编号，查看内存：pidstat -p 进程编号 -r 采样间隔秒数，查看磁盘IO：pidstat -d 采样间隔秒数 -p 进程号
+
+```shell
+[root@centos7 ~]# pidstat -u 1 -p 36947
+Linux 3.10.0-862.el7.x86_64 (centos7) 	2020年05月10日 	_x86_64_	(4 CPU)
+
+20时06分43秒   UID       PID    %usr %system  %guest    %CPU   CPU  Command
+20时06分44秒     0     36947   27.00   41.00    0.00   68.00     3  java
+20时06分45秒     0     36947   26.73   38.61    0.00   65.35     3  java
+20时06分46秒     0     36947   27.00   38.00    0.00   65.00     3  java
+20时06分47秒     0     36947   28.00   40.00    0.00   68.00     3  java
+20时06分48秒     0     36947   24.00   40.00    0.00   64.00     3  java
+^C
+平均时间:     0     36947   26.55   39.52    0.00   66.07     -  java
+```
+
+```shell
+[root@centos7 ~]# pidstat -p 36947 -r 2
+Linux 3.10.0-862.el7.x86_64 (centos7) 	2020年05月10日 	_x86_64_	(4 CPU)
+
+20时08分05秒   UID       PID  minflt/s  majflt/s     VSZ    RSS   %MEM  Command
+20时08分07秒     0     36947      1.99      0.00 3406084  58620   1.51  java
+20时08分09秒     0     36947      1.50      0.00 3406084  58620   1.51  java
+20时08分11秒     0     36947      1.50      0.00 3406084  58620   1.51  java
+20时08分13秒     0     36947      1.50      0.00 3406084  58620   1.51  java
+^C
+平均时间:     0     36947      1.62      0.00 3406084  58620   1.51  java
+```
+
+```shell
+[root@centos7 ~]# pidstat -d 2 -p 36947
+Linux 3.10.0-862.el7.x86_64 (centos7) 	2020年05月10日 	_x86_64_	(4 CPU)
+
+20时17分19秒   UID       PID   kB_rd/s   kB_wr/s kB_ccwr/s  Command
+20时17分21秒     0     36947      0.00      0.00      0.00  java
+20时17分23秒     0     36947      0.00      0.00      0.00  java
+20时17分25秒     0     36947      0.00      0.00      0.00  java
+20时17分27秒     0     36947      0.00      0.00      0.00  java
+q20时17分29秒     0     36947      0.00      0.00      0.00  java
+20时17分31秒     0     36947      0.00      0.00      0.00  java
+20时17分33秒     0     36947      0.00      0.00      0.00  java
+^C
+平均时间:     0     36947      0.00      0.00      0.00  java
+```
+
+### 9.4 free
+
+```shell
+[root@centos7 ~]# free -m
+              total        used        free      shared  buff/cache   available
+Mem:           3781        2596         121           6        1063         872
+Swap:          2047         686        1361
+```
+
+### 9.5 df
+
+```shell
+[root@centos7 ~]# df -h
+文件系统                 容量  已用  可用 已用% 挂载点
+/dev/mapper/centos-root   17G   12G  5.5G   69% /
+devtmpfs                 1.9G     0  1.9G    0% /dev
+tmpfs                    1.9G     0  1.9G    0% /dev/shm
+tmpfs                    1.9G   13M  1.9G    1% /run
+tmpfs                    1.9G     0  1.9G    0% /sys/fs/cgroup
+/dev/sda1               1014M  170M  845M   17% /boot
+tmpfs                    379M  4.0K  379M    1% /run/user/42
+tmpfs                    379M   44K  379M    1% /run/user/0
+/dev/sr0                 4.2G  4.2G     0  100% /run/media/root/CentOS 7 x86_64
+```
+
+### 9.6 iostat
+
+```shell
+[root@centos7 ~]# iostat -xdk 2 3
+Linux 3.10.0-862.el7.x86_64 (centos7) 	2020年05月10日 	_x86_64_	(4 CPU)
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+scd0              0.00     0.00    0.00    0.00     0.04     0.00    72.41     0.00    1.03    1.03    0.00   0.93   0.00
+sda              35.33    50.63   16.44    6.57   789.55   341.92    98.34     3.79  164.09   76.67  383.02   2.70   6.22
+dm-0              0.00     0.00    9.99    3.08   619.19   125.18   113.86     1.00   76.36   75.22   80.06   3.98   5.21
+dm-1              0.00     0.00   42.33   54.17   169.37   216.67     8.00    26.91  278.65   86.79  428.57   0.47   4.51
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+scd0              0.00     0.00    0.00    0.00     0.00     0.00     0.00     0.00    0.00    0.00    0.00   0.00   0.00
+sda               0.00     0.00    0.50    1.00     4.00     4.00    10.67     0.00    2.67    8.00    0.00   2.67   0.40
+dm-0              0.00     0.00    0.50    1.00     4.00     4.00    10.67     0.00    2.67    8.00    0.00   2.67   0.40
+dm-1              0.00     0.00    0.00    0.00     0.00     0.00     0.00     0.00    0.00    0.00    0.00   0.00   0.00
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+scd0              0.00     0.00    0.00    0.00     0.00     0.00     0.00     0.00    0.00    0.00    0.00   0.00   0.00
+sda               0.00     0.00    0.00    1.00     0.00     8.00    16.00     0.00    0.00    0.00    0.00   0.00   0.00
+dm-0              0.00     0.00    0.00    1.00     0.00     8.00    16.00     0.00    0.00    0.00    0.00   0.00   0.00
+dm-1              0.00     0.00    0.00    0.00     0.00     0.00     0.00     0.00    0.00    0.00    0.00   0.00   0.00
+```
+
+磁盘块设备分布：
+
+rkB/s：每秒读取数据量kB。
+
+wkB/s：每秒写入数据量kB。
+
+svctm：I/O请求的平均服务时间，单位毫秒。
+
+await：I/O请求的平均等待时间，单位毫秒，值越小，性能越好。
+
+**util：一秒钟有百分之几的时间用于I/O操作，接近100%，表示磁盘带宽跑满，需要优化程序或者增加磁盘**。
+
+rkB/s、wkB/s根据系统应用不同会有不同的值，担忧规律遵循，长期、超大数据读写，肯定不正常，需要优化程序读取。
+
+svctm的值域await的值很接近，表示几乎没有I/O等待，磁盘性能好，如果await的值远高于svctm的值，则表示I/O队列等待太长，需要优化程序或更换更快磁盘。
+
+### 9.7 ifstat
+
+查看网络I/O信息，ifstat 1
+
+## 10. 假如生产环境出现CPU占用过高，请谈谈你的分析思路和定位
+
+步骤：
+
+- 使用top命令找出CPU占比最高的
+
+```shell
+[root@centos7 ~]# top
+top - 20:35:54 up  7:52,  4 users,  load average: 1.87, 1.66, 1.67
+Tasks: 229 total,   3 running, 226 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  5.6 us, 13.0 sy,  0.0 ni, 81.3 id,  0.0 wa,  0.0 hi,  0.1 si,  0.0 st
+KiB Mem :  3872604 total,   133588 free,  2642636 used,  1096380 buff/cache
+KiB Swap:  2097148 total,  1397428 free,   699720 used.   910576 avail Mem 
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND                                                                                                                                
+37444 root      20   0 3406084  54400  11948 S  66.8  1.4   3:57.62 java                                                                                                                                   
+36632 root      20   0  158780   5564   4216 R   8.3  0.1   4:15.24 sshd                                                                                                                                   
+ 9764 root      20   0 4237256 530768  10304 S   1.7 13.7   4:43.62 java  
+```
+
+- ps -ef或者jps进一步定位，得知是一个怎么样的一个后台程序
+
+```shell
+[root@centos7 ~]# jps -l
+37568 sun.tools.jps.Jps
+37444 jvm.TestLinux
+```
+
+- 定位到具体线程或者代码：ps -mp 进程 -o THREAD,tid,time
+
+> -m：显示所有线程
+>
+> -p：pid进程使用cpu的时间
+>
+> -o：改参数后是用户自定义格式
+
+```shell
+[root@centos7 ~]# ps -mp 37444 -o THREAD,tid,time
+USER     %CPU PRI SCNT WCHAN  USER SYSTEM   TID     TIME
+root     67.5   -    - -         -      -     - 00:06:30
+root      0.0  19    - futex_    -      - 37444 00:00:00
+root     66.5  19    - -         -      - 37445 00:06:24
+root      0.1  19    - futex_    -      - 37446 00:00:01
+root      0.1  19    - futex_    -      - 37447 00:00:01
+root      0.1  19    - futex_    -      - 37448 00:00:01
+root      0.1  19    - futex_    -      - 37449 00:00:01
+root      0.1  19    - futex_    -      - 37450 00:00:00
+root      0.0  19    - futex_    -      - 37451 00:00:00
+root      0.0  19    - futex_    -      - 37452 00:00:00
+root      0.0  19    - futex_    -      - 37453 00:00:00
+root      0.0  19    - futex_    -      - 37454 00:00:00
+root      0.0  19    - futex_    -      - 37455 00:00:00
+root      0.0  19    - futex_    -      - 37456 00:00:00
+root      0.0  19    - futex_    -      - 37457 00:00:00
+root      0.0  19    - futex_    -      - 37458 00:00:00
+```
+
+- 将需要的线程ID转换为16进制格式(英文小写格式)：printf "%x\n"  有问题的线程ID
+
+```shell
+37445[root@centos7 ~]# printf "%x\n" 37445
+9245
+```
+
+-  jstack 进程ID | grep tid(16进制线程ID小写英文) -A60
+
+```shell
+[root@centos7 ~]# jstack 37444 | grep 9245 -A60
+"main" #1 prio=5 os_prio=0 tid=0x00007f39cc008800 nid=0x9245 runnable [0x00007f39d399d000]
+   java.lang.Thread.State: RUNNABLE
+	at java.io.FileOutputStream.writeBytes(Native Method)
+	at java.io.FileOutputStream.write(FileOutputStream.java:326)
+	at java.io.BufferedOutputStream.flushBuffer(BufferedOutputStream.java:82)
+	at java.io.BufferedOutputStream.flush(BufferedOutputStream.java:140)
+	- locked <0x00000000c4e128c8> (a java.io.BufferedOutputStream)
+	at java.io.PrintStream.write(PrintStream.java:482)
+	- locked <0x00000000c4e06568> (a java.io.PrintStream)
+	at sun.nio.cs.StreamEncoder.writeBytes(StreamEncoder.java:221)
+	at sun.nio.cs.StreamEncoder.implFlushBuffer(StreamEncoder.java:291)
+	at sun.nio.cs.StreamEncoder.flushBuffer(StreamEncoder.java:104)
+	- locked <0x00000000c4e126c0> (a java.io.OutputStreamWriter)
+	at java.io.OutputStreamWriter.flushBuffer(OutputStreamWriter.java:185)
+	at java.io.PrintStream.write(PrintStream.java:527)
+	- eliminated <0x00000000c4e06568> (a java.io.PrintStream)
+	at java.io.PrintStream.print(PrintStream.java:597)
+	at java.io.PrintStream.println(PrintStream.java:736)
+	- locked <0x00000000c4e06568> (a java.io.PrintStream)
+	at jvm.TestLinux.main(TestLinux.java:12)
+
+"VM Thread" os_prio=0 tid=0x00007f39cc076800 nid=0x924a runnable 
+
+"GC task thread#0 (ParallelGC)" os_prio=0 tid=0x00007f39cc01d800 nid=0x9246 runnable 
+
+"GC task thread#1 (ParallelGC)" os_prio=0 tid=0x00007f39cc01f800 nid=0x9247 runnable 
+
+"GC task thread#2 (ParallelGC)" os_prio=0 tid=0x00007f39cc021800 nid=0x9248 runnable 
+
+"GC task thread#3 (ParallelGC)" os_prio=0 tid=0x00007f39cc023000 nid=0x9249 runnable 
+
+"VM Periodic Task Thread" os_prio=0 tid=0x00007f39cc0cc800 nid=0x9252 waiting on condition 
+
+JNI global references: 9
+```
+
+## 11. JVM性能调优和监控工具
+
+### 11.1 jps
+
+Java版的`ps -ef`查看所有JVM进程。
+
+### 11.2 jstack
+
+查看JVM中运行线程的状态，比较重要。可以定位CPU占用过高位置，定位死锁位置。
+
+### 11.3 jinfo/jstat
+
+`jinfo`查看JVM的运行环境参数，比如默认的JVM参数等。`jstat`统计信息监视工具。
+
+### 11.4 jmap
+
+JVM内存映像工具。
