@@ -1,4 +1,4 @@
-# JVM核心知识点
+<h1 align="center"><code>JVM核心知识点</code></h1>
 
 ## 1. JVM内存结构
 
