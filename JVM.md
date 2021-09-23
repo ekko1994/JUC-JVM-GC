@@ -74,7 +74,7 @@
 
 ## 1. JVM内存结构
 
-![JVM内存结构](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/JVM体系结构.bmp)
+![JVM内存结构](images/JVM体系结构.bmp)
 
 基本结构与之前类似，只是Java8取消了之前的“永久代”，取而代之的是“元空间”——**Metaspace**，两者本质是一样的。“永久代”使用的是JVM的堆内存，而“元空间”是直接使用的本机物理内存。
 
@@ -88,7 +88,7 @@
 
   > 这个算法的基本思路就是通过一系列的称为“GC Roots”的对象作为起始点，从这些节点开始向下搜索，搜索所走过的路径称为引用链，当一个对象到GC Roots没有任何引用链相连时，则证明此对象是不可用的。
 
-  ![GC Roots](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_Roots.bmp)
+  ![GC Roots](images/GC_Roots.bmp)
 
 ### 2.2 哪些对象可以作为GC Roots？
 
@@ -217,9 +217,9 @@ Java HotSpot(TM) 64-Bit Server VM (build 25.172-b11, mixed mode)
 
 输出`GC`收集信息，包含`GC`和`Full GC`信息。
 
-![young gc](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/young_gc.bmp)
+![young gc](images/young_gc.bmp)
 
-![full gc](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/full_gc.bmp)
+![full gc](images/full_gc.bmp)
 
 ### 4.6 -XX:SurvivorRatio
 
@@ -408,13 +408,13 @@ java.lang.ref.PhantomReference@74a14482
 
 ### 5.5 小总结
 
-![GC Roots 以及四大引用](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_Root以及四大引用.bmp)
+![GC Roots 以及四大引用](images/GC_Root以及四大引用.bmp)
 
 ## 6. 请谈谈你对OOM的认识
 
 `java.lang.StackOverflowError` 和 `java.lang.OutOfMemoryError` 都属于错误，不是异常。
 
-![认识OOM](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/认识OOM.png)
+![认识OOM](images/认识OOM.png)
 
 ### 6.1 java.lang.StackOverflowError
 
@@ -622,7 +622,7 @@ LargePagesIndividualAllocation -XX:+UseParallelGC
 
 ### 8.3 七大垃圾收集器
 
-![GC_七大垃圾收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/GC_七大垃圾收集器.bmp)
+![GC_七大垃圾收集器](images/GC_七大垃圾收集器.bmp)
 
 HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃圾收集器**Deprecated**，不推荐使用。
 
@@ -641,7 +641,7 @@ HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃�
 
 使用`-XX:+UseSerialGC`可以显式开启，开启后默认使用`Serial`+`SerialOld`的组合。新生代使用复制算法，老年代使用标记-整理算法。
 
-![Serial收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/Serial收集器.jpg)
+![Serial收集器](images/Serial收集器.jpg)
 
 #### 8.3.2 ParNew收集器
 
@@ -651,7 +651,7 @@ HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃�
 
 > -XX:ParallelGCThreads 限制线程数量，默认开启和CPU数目相同的线程数。
 
-![ParNew收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/ParNew收集器.jpg)
+![ParNew收集器](images/ParNew收集器.jpg)
 
 #### 8.3.3 Parallel Scavenge收集器
 
@@ -661,7 +661,7 @@ HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃�
 
 > -XX:ParallelGCThreads=N 表示启动多少个线程，CPU>8，N=5/8；CPU<8，N=实际个数
 
-![Parallel Scavenge收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/Parallel_Scavenge收集器.jpg)
+![Parallel Scavenge收集器](images/Parallel_Scavenge收集器.jpg)
 
 #### 8.3.4 ParallelOld收集器
 
@@ -675,7 +675,7 @@ HotSpot中包含的收集器，红色表示**java8**版本开始，对应的垃�
 
 使用`-XX:+UseConcMarkSweepGC`开启。开启过后，新生代默认使用`ParNew`，同时老年代使用`SerialOld`作为备用。
 
-![CMS收集器](https://github.com/jackhusky/JUC-JVM-GC/blob/master/imgs/CMS收集器.jpg)
+![CMS收集器](images/CMS收集器.jpg)
 
 **过程：**
 
